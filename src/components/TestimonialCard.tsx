@@ -11,20 +11,21 @@ export default function TestimonialCard() {
 
   const goTo = useCallback(
     (index: number) => {
-      if (isAnimating) return;
       setIsAnimating(true);
       setCurrent(index);
       setTimeout(() => setIsAnimating(false), 400);
     },
-    [isAnimating]
+    []
   );
 
   useEffect(() => {
     const timer = setInterval(() => {
-      goTo((current + 1) % testimonials.length);
+      if (!isAnimating) {
+        goTo((current + 1) % testimonials.length);
+      }
     }, 5000);
     return () => clearInterval(timer);
-  }, [current, goTo]);
+  }, [current, isAnimating, goTo]);
 
   return (
     <div className="relative">

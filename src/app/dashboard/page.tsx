@@ -322,14 +322,8 @@ function DashboardContent() {
               <p className="text-xs text-gray-400">Welcome back, {profile?.full_name?.split(' ')[0] || "Learner"}! 👋</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button className="relative p-2 text-gray-500 hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-xl transition-all" aria-label="Notifications">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--accent)] rounded-full" />
-            </button>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--primary)] to-[var(--primary-light)] flex items-center justify-center text-white text-xs font-bold">
-              {profile?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase()}
-            </div>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Icons removed as per user request */}
           </div>
         </header>
 

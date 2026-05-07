@@ -41,22 +41,40 @@ export async function POST(req: NextRequest) {
     // Call PayUnit
     const apiKey = process.env.PAYUNIT_API_KEY!;
     const apiToken = process.env.PAYUNIT_API_TOKEN!;
+    const apiUser = process.env.PAYUNIT_API_USER!;
     const apiUrl = process.env.PAYUNIT_API_URL || "https://gateway.payunit.net";
+
+    // Create Basic Auth header
+    const authHeader = `Basic ${Buffer.from(`${apiUser}:${apiToken}`).toString("base64")}`;
+
+    // PayUnit requires HTTPS for callback URLs in live mode.
+    // If we are on localhost, we use a placeholder or the user must use ngrok.
+    let finalReturnUrl = returnUrl;
+    let finalNotifyUrl = notifyUrl;
+    
+    const mode = "live";
+    if (mode === "live" && finalReturnUrl.startsWith("http://")) {
+      console.warn("PayUnit requires HTTPS for callback URLs in live mode. Replacing http with https for request.");
+      finalReturnUrl = finalReturnUrl.replace("http://", "https://");
+      finalNotifyUrl = finalNotifyUrl.replace("http://", "https://");
+    }
 
     const payunitRes = await fetch(`${apiUrl}/api/gateway/makepayment`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        Authorization: `Bearer ${apiToken}`,
-        mode: "live",
+        "x-api-user": apiUser,
+        "Authorization": authHeader,
+        "mode": "live",
+        "User-Agent": "Gizami-LMS/1.0",
       },
       body: JSON.stringify({
         gateway,
         amount,
         transaction_id: transactionId,
-        return_url: returnUrl,
-        notify_url: notifyUrl,
+        return_url: finalReturnUrl,
+        notify_url: finalNotifyUrl,
         phone_number: phoneNumber,
         currency: "XAF",
         paymentType: "button",

@@ -21,20 +21,21 @@ export default function HeroSlider() {
 
   const goTo = useCallback(
     (index: number) => {
-      if (isAnimating) return;
       setIsAnimating(true);
       setCurrent(index);
       setTimeout(() => setIsAnimating(false), 500);
     },
-    [isAnimating]
+    []
   );
 
   useEffect(() => {
     const timer = setInterval(() => {
-      goTo((current + 1) % heroSlides.length);
+      if (!isAnimating) {
+        goTo((current + 1) % heroSlides.length);
+      }
     }, 5500);
     return () => clearInterval(timer);
-  }, [current, goTo]);
+  }, [current, isAnimating, goTo]);
 
   const slide = heroSlides[current];
 

@@ -25,10 +25,12 @@ const navLinks = [
 ];
 
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function Navbar() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isHome = pathname === "/";
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -81,10 +83,12 @@ export default function Navbar() {
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? "glass shadow-lg shadow-black/5"
+          ? "bg-white shadow-lg shadow-black/5"
           : isMobileOpen 
             ? "bg-white border-b border-[var(--border)]"
-            : "bg-transparent"
+            : !isHome
+              ? "bg-white border-b border-[var(--border)]"
+              : "bg-transparent"
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -96,7 +100,7 @@ export default function Navbar() {
               alt="Gizami" 
               width={160} 
               height={56} 
-              className="h-10 w-auto object-contain bg-white/90 p-1 rounded-lg"
+              className="h-10 w-auto object-contain bg-white p-1 rounded-lg"
               priority
             />
           </Link>
@@ -133,60 +137,17 @@ export default function Navbar() {
             </button>
 
             {mounted && (isLoggedIn ? (
-              <>
-                <button aria-label="Notifications" className="p-2 relative text-gray-600 hover:text-[var(--primary)] hover:bg-[var(--primary)]/10 rounded-xl transition-all">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[var(--accent)] rounded-full" />
+              <div className="flex items-center gap-3">
+                <Link href="/dashboard" className="text-sm font-medium text-gray-700 hover:text-[var(--primary)]">
+                  Dashboard
+                </Link>
+                <button 
+                  onClick={handleLogout}
+                  className="text-sm font-medium text-red-600 hover:text-red-700"
+                >
+                  Logout
                 </button>
-                <div className="relative">
-                  <button
-                    onClick={() => setIsProfileOpen(!isProfileOpen)}
-                    className="flex items-center gap-2 p-1.5 pr-3 rounded-xl border border-[var(--border)] hover:border-[var(--primary)] transition-all bg-white"
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--primary)] to-[var(--primary-light)] flex items-center justify-center text-white text-xs font-bold">
-                      {profile?.full_name?.charAt(0) || user?.email?.charAt(0)?.toUpperCase()}
-                    </div>
-                    <span className="text-sm font-medium text-gray-700 truncate max-w-[100px]">
-                      {profile?.full_name?.split(' ')[0] || "User"}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isProfileOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {isProfileOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[var(--border)] overflow-hidden animate-fade-in">
-                      <div className="p-4 border-b border-[var(--border)] bg-[var(--bg)]">
-                        <p className="font-semibold text-sm text-gray-800 truncate">{profile?.full_name || "New Learner"}</p>
-                        <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                      </div>
-                      <div className="p-2">
-                        {[
-                          { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-                          { icon: BookOpen, label: "My Courses", href: "/dashboard" },
-                          { icon: User, label: "Profile", href: "/dashboard" },
-                          { icon: Settings, label: "Settings", href: "/dashboard" },
-                        ].map((item) => (
-                          <Link
-                            key={item.label}
-                            href={item.href}
-                            className="flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[var(--primary)]/10 hover:text-[var(--primary)] rounded-xl transition-all"
-                          >
-                            <item.icon className="w-4 h-4" />
-                            {item.label}
-                          </Link>
-                        ))}
-                        <div className="border-t border-[var(--border)] mt-1 pt-1">
-                          <button 
-                            onClick={handleLogout}
-                            className="flex items-center gap-3 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-xl transition-all w-full text-left"
-                          >
-                            <LogOut className="w-4 h-4" />
-                            Logout
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
+              </div>
             ) : (
               <>
                 <Link 
