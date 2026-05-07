@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       finalNotifyUrl = finalNotifyUrl.replace("http://", "https://");
     }
 
-    const payunitRes = await fetch(`${apiUrl}/api/gateway/makepayment`, {
+    const payunitRes = await fetch(`${apiUrl}/api/gateway/initialize`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -69,8 +69,7 @@ export async function POST(req: NextRequest) {
         "mode": "live",
       },
       body: JSON.stringify({
-        gateway,
-        amount,
+        total_amount: amount,
         transaction_id: transactionId,
         return_url: finalReturnUrl,
         notify_url: finalNotifyUrl,
@@ -102,14 +101,15 @@ export async function POST(req: NextRequest) {
       // Clean up pending record on failure
       await supabaseAdmin.from("payments").delete().eq("transaction_id", transactionId);
       return NextResponse.json(
-        { error: payunitData.message || "PayUnit request failed" },
+        { error: payunitData.message || "PayUnit initialization failed" },
         { status: 400 }
       );
     }
 
     // Return the redirect URL from PayUnit
     const redirectUrl =
-      payunitData.transaction_data?.payment_url ||
+      payunitData.data?.transaction_url ||
+      payunitData.transaction_url ||
       payunitData.payment_url ||
       payunitData.url ||
       payunitData.redirect_url;
