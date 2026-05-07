@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "Authorization": `Bearer ${apiToken}`,
+        "x-api-user": apiUser,
+        "Authorization": authHeader,
         "mode": "live",
       },
       body: JSON.stringify({
@@ -81,7 +82,20 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const payunitData = await payunitRes.json();
+    // Try to get JSON, but handle HTML error pages gracefully
+    const responseText = await payunitRes.text();
+    let payunitData: any;
+    
+    try {
+      payunitData = JSON.parse(responseText);
+    } catch (e) {
+      console.error("PayUnit returned non-JSON response:", responseText);
+      return NextResponse.json(
+        { error: "Payment gateway returned an invalid response. Please contact support." },
+        { status: 502 }
+      );
+    }
+
     console.log("PayUnit response:", payunitData);
 
     if (!payunitRes.ok || payunitData.status === "error") {
