@@ -64,10 +64,8 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
-        "x-api-user": apiUser,
-        "Authorization": authHeader,
+        "Authorization": `Bearer ${apiToken}`,
         "mode": "live",
-        "User-Agent": "Gizami-LMS/1.0",
       },
       body: JSON.stringify({
         gateway,
