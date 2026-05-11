@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
+import AuthStatusModal from "@/components/AuthStatusModal";
+import { useEffect } from "react";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -15,11 +17,33 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isRegistrationDisabled, setIsRegistrationDisabled] = useState(false);
+
+  useEffect(() => {
+    async function checkStatus() {
+      const { data } = await supabase
+        .from("settings")
+        .select("registration_enabled")
+        .eq("id", "00000000-0000-0000-0000-000000000000")
+        .single();
+      
+      if (data && data.registration_enabled === false) {
+        setIsRegistrationDisabled(true);
+      }
+    }
+    checkStatus();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+
+    if (isRegistrationDisabled) {
+      setError("Registration is currently disabled. Please try again later.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -231,6 +255,12 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
+
+      <AuthStatusModal 
+        isOpen={isRegistrationDisabled} 
+        onClose={() => setIsRegistrationDisabled(false)} 
+        type="registration"
+      />
     </div>
   );
 }

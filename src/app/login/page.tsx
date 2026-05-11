@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { useEffect } from "react";
+import AuthStatusModal from "@/components/AuthStatusModal";
 
 import { supabase } from "@/lib/supabase";
 
@@ -14,11 +16,35 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoginDisabled, setIsLoginDisabled] = useState(false);
+
+  useEffect(() => {
+    async function checkStatus() {
+      const { data } = await supabase
+        .from("settings")
+        .select("login_enabled")
+        .eq("id", "00000000-0000-0000-0000-000000000000")
+        .single();
+      
+      if (data && data.login_enabled === false) {
+        setIsLoginDisabled(true);
+      }
+    }
+    checkStatus();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
+
+    if (isLoginDisabled) {
+      // We still allow submission in case it's an admin? 
+      // Actually the user said "when user click ... it shows a pop up".
+      // So I'll show the modal.
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -134,6 +160,11 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
+              onClick={(e) => {
+                if (isLoginDisabled) {
+                  e.preventDefault();
+                }
+              }}
               className="btn-primary w-full text-base py-3.5 justify-center mt-2 disabled:opacity-70"
               aria-busy={isLoading}
             >
@@ -167,6 +198,12 @@ export default function LoginPage() {
           Your data is protected with 256-bit SSL encryption
         </p>
       </div>
+
+      <AuthStatusModal 
+        isOpen={isLoginDisabled} 
+        onClose={() => setIsLoginDisabled(false)} 
+        type="login"
+      />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import TRANZAK from "tranzak-node";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,6 +27,12 @@ export async function POST(req: NextRequest) {
     const returnUrl = `${siteUrl}/payment/callback?courseId=${courseId}&txId=${transactionId}`;
     const notifyUrl = `${siteUrl}/api/payment/webhook`;
 
+    // Check which payment provider is active from settings, default to tranzak if not set
+    // In our implementation plan, the user wants to use tranzak.
+    // If the provider isn't stored in a generic 'settings' table yet, we'll default to 'tranzak'.
+    let activeProvider = "tranzak";
+    // We'll also check if the user selected Tranzak explicitly if we had frontend support for it
+    
     // Store pending payment in DB
     await supabaseAdmin.from("payments").insert({
       id: crypto.randomUUID(),
@@ -38,88 +45,124 @@ export async function POST(req: NextRequest) {
       status: "pending",
     });
 
-    // Call PayUnit
-    const apiKey = process.env.PAYUNIT_API_KEY!;
-    const apiToken = process.env.PAYUNIT_API_TOKEN!;
-    const apiUser = process.env.PAYUNIT_API_USER!;
-    const apiUrl = process.env.PAYUNIT_API_URL || "https://gateway.payunit.net";
+    if (activeProvider === "tranzak") {
+      const appId = process.env.TRANZAK_APP_ID;
+      const appKey = process.env.TRANZAK_APP_KEY;
+      const mode = process.env.TRANZAK_MODE || "sandbox";
 
-    // Create Basic Auth header
-    const authHeader = `Basic ${Buffer.from(`${apiUser}:${apiToken}`).toString("base64")}`;
+      if (!appId || !appKey) {
+        return NextResponse.json({ error: "Tranzak credentials missing" }, { status: 503 });
+      }
 
-    // PayUnit requires HTTPS for callback URLs in live mode.
-    // If we are on localhost, we use a placeholder or the user must use ngrok.
-    let finalReturnUrl = returnUrl;
-    let finalNotifyUrl = notifyUrl;
-    
-    const mode = "live";
-    if (mode === "live" && finalReturnUrl.startsWith("http://")) {
-      console.warn("PayUnit requires HTTPS for callback URLs in live mode. Replacing http with https for request.");
-      finalReturnUrl = finalReturnUrl.replace("http://", "https://");
-      finalNotifyUrl = finalNotifyUrl.replace("http://", "https://");
-    }
+      const client = new TRANZAK({ appId, appKey, mode });
+      
+      // We pass the transactionId as customTransactionRef or mchTransactionRef
+      // Tranzak requires the phone number without the +
+      const cleanPhone = phoneNumber.replace("+", "");
 
-    const payunitRes = await fetch(`${apiUrl}/api/gateway/initialize`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "x-api-user": apiUser,
-        "Authorization": authHeader,
-        "mode": "live",
-      },
-      body: JSON.stringify({
-        total_amount: amount,
-        transaction_id: transactionId,
-        return_url: finalReturnUrl,
-        notify_url: finalNotifyUrl,
-        phone_number: phoneNumber,
-        currency: "XAF",
-        paymentType: "button",
-        name: courseTitle || "Gizami Course",
+      // Send the prompt directly to the user's phone!
+      const transaction = await client.payment.collection.simple.chargeMobileMoney({
+        amount,
+        currencyCode: "XAF",
         description: `Enrollment for: ${courseTitle}`,
-      }),
-    });
+        payerNote: `Payment for Gizami course`,
+        mchTransactionRef: transactionId,
+        mobileWalletNumber: cleanPhone,
+      });
 
-    // Try to get JSON, but handle HTML error pages gracefully
-    const responseText = await payunitRes.text();
-    let payunitData: any;
-    
-    try {
-      payunitData = JSON.parse(responseText);
-    } catch (e) {
-      console.error("PayUnit returned non-JSON response:", responseText);
-      return NextResponse.json(
-        { error: "Payment gateway returned an invalid response. Please contact support." },
-        { status: 502 }
-      );
+      // Update the DB record with Tranzak's internal request ID so the webhook can match it
+      // Wait, the callback page polls using transactionId (which is mchTransactionRef).
+      // So we don't strictly need to overwrite it, but it's good to keep Tranzak's requestId.
+      await supabaseAdmin
+        .from("payments")
+        .update({ provider_ref: transaction.data.requestId })
+        .eq("transaction_id", transactionId);
+
+      // Tranzak processes it directly. We redirect the user to our callback page to poll!
+      return NextResponse.json({
+        success: true,
+        transactionId,
+        redirectUrl: returnUrl,
+      });
+
+    } else {
+      // Call PayUnit
+      const apiKey = process.env.PAYUNIT_API_KEY!;
+      const apiToken = process.env.PAYUNIT_API_TOKEN!;
+      const apiUser = process.env.PAYUNIT_API_USER!;
+      const apiUrl = process.env.PAYUNIT_API_URL || "https://gateway.payunit.net";
+
+      // Create Basic Auth header
+      const authHeader = `Basic ${Buffer.from(`${apiUser}:${apiToken}`).toString("base64")}`;
+
+      // PayUnit requires HTTPS for callback URLs in live mode.
+      let finalReturnUrl = returnUrl;
+      let finalNotifyUrl = notifyUrl;
+      
+      const mode = "live";
+      if (mode === "live" && finalReturnUrl.startsWith("http://")) {
+        console.warn("PayUnit requires HTTPS for callback URLs in live mode. Replacing http with https for request.");
+        finalReturnUrl = finalReturnUrl.replace("http://", "https://");
+        finalNotifyUrl = finalNotifyUrl.replace("http://", "https://");
+      }
+
+      const payunitRes = await fetch(`${apiUrl}/api/gateway/initialize`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "x-api-user": apiUser,
+          "Authorization": authHeader,
+          "mode": "live",
+        },
+        body: JSON.stringify({
+          total_amount: amount,
+          transaction_id: transactionId,
+          return_url: finalReturnUrl,
+          notify_url: finalNotifyUrl,
+          phone_number: phoneNumber,
+          currency: "XAF",
+          paymentType: "button",
+          name: courseTitle || "Gizami Course",
+          description: `Enrollment for: ${courseTitle}`,
+        }),
+      });
+
+      const responseText = await payunitRes.text();
+      let payunitData: any;
+      
+      try {
+        payunitData = JSON.parse(responseText);
+      } catch (e) {
+        console.error("PayUnit returned non-JSON response:", responseText);
+        return NextResponse.json(
+          { error: "Payment gateway returned an invalid response. Please contact support." },
+          { status: 502 }
+        );
+      }
+
+      if (!payunitRes.ok || payunitData.status === "error") {
+        await supabaseAdmin.from("payments").delete().eq("transaction_id", transactionId);
+        return NextResponse.json(
+          { error: payunitData.message || "PayUnit initialization failed" },
+          { status: 400 }
+        );
+      }
+
+      const redirectUrl =
+        payunitData.data?.transaction_url ||
+        payunitData.transaction_url ||
+        payunitData.payment_url ||
+        payunitData.url ||
+        payunitData.redirect_url;
+
+      return NextResponse.json({
+        success: true,
+        transactionId,
+        redirectUrl,
+        payunitData,
+      });
     }
-
-    console.log("PayUnit response:", payunitData);
-
-    if (!payunitRes.ok || payunitData.status === "error") {
-      // Clean up pending record on failure
-      await supabaseAdmin.from("payments").delete().eq("transaction_id", transactionId);
-      return NextResponse.json(
-        { error: payunitData.message || "PayUnit initialization failed" },
-        { status: 400 }
-      );
-    }
-
-    // Return the redirect URL from PayUnit
-    const redirectUrl =
-      payunitData.data?.transaction_url ||
-      payunitData.transaction_url ||
-      payunitData.payment_url ||
-      payunitData.url ||
-      payunitData.redirect_url;
-
-    return NextResponse.json({
-      success: true,
-      transactionId,
-      redirectUrl,
-      payunitData,
-    });
   } catch (err: any) {
     console.error("Payment initiation error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

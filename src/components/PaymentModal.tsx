@@ -210,7 +210,7 @@ export default function PaymentModal({
           {/* Trust badge */}
           <p className="text-center text-xs text-gray-400 flex items-center justify-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5 text-green-500" />
-            Secured by PayUnit · Cameroon Mobile Money
+            Secured Payment · Cameroon Mobile Money
           </p>
         </div>
       </div>

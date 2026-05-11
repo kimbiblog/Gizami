@@ -23,7 +23,7 @@ const steps = [
     number: "02",
     icon: BookOpen,
     title: "Choose a Course",
-    desc: "Browse 1000+ courses across tech, business, design and more.",
+    desc: "Browse 20+ courses across tech, business, design and more.",
     color: "from-[var(--accent)] to-orange-400",
     bg: "bg-[var(--accent)]/10",
     iconColor: "text-[var(--accent)]",
@@ -40,9 +40,9 @@ const steps = [
 ];
 
 const stats = [
-  { icon: BookOpen, value: "1,000+", label: "Expert Courses", color: "text-[var(--primary)]", bg: "bg-[var(--primary)]/10" },
-  { icon: Users, value: "500K+", label: "Active Students", color: "text-[var(--accent)]", bg: "bg-[var(--accent)]/10" },
-  { icon: Award, value: "150+", label: "Certifications", color: "text-purple-600", bg: "bg-purple-100" },
+  { icon: BookOpen, value: "20+", label: "Expert Courses", color: "text-[var(--primary)]", bg: "bg-[var(--primary)]/10" },
+  { icon: Users, value: "300+", label: "Active Students", color: "text-[var(--accent)]", bg: "bg-[var(--accent)]/10" },
+  { icon: Award, value: "4+", label: "Certifications", color: "text-purple-600", bg: "bg-purple-100" },
   { icon: TrendingUp, value: "98%", label: "Success Rate", color: "text-blue-600", bg: "bg-blue-100" },
 ];
 
@@ -303,7 +303,7 @@ export default function HomePage() {
                 Ready to Transform Your Career?
               </h2>
               <p className="text-green-100 text-lg mb-8 max-w-xl mx-auto">
-                Join over 500,000 learners. Get unlimited access to all courses, certificates, and expert support.
+                Join over 300+ learners. Get unlimited access to all courses, certificates, and expert support.
               </p>
               <div className="flex flex-wrap gap-4 justify-center">
                 <Link href="/signup" className="btn-accent text-base px-10 py-4">

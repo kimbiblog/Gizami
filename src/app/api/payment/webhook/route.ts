@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import TRANZAK from "tranzak-node";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,10 +15,30 @@ export async function POST(req: NextRequest) {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    console.log("PayUnit Webhook received:", body);
+    console.log("Webhook received:", body);
 
-    const transactionId = body.transaction_id || body.transactionId;
-    const status = body.status || body.transaction_status;
+    let transactionId = body.transaction_id || body.transactionId;
+    let status = body.status || body.transaction_status;
+    let isTranzak = false;
+
+    // Try to validate as Tranzak Webhook
+    const appId = process.env.TRANZAK_APP_ID;
+    const appKey = process.env.TRANZAK_APP_KEY;
+    
+    if (appId && appKey) {
+      try {
+        const client = new TRANZAK({ appId, appKey, mode: process.env.TRANZAK_MODE || "sandbox" });
+        const isValid = await client.webhook.process(body);
+        if (isValid) {
+          isTranzak = true;
+          // Tranzak webhook structure
+          transactionId = body.data?.mchTransactionRef || body.data?.requestId;
+          status = body.data?.status;
+        }
+      } catch (e) {
+        // Not a valid Tranzak webhook, fallback to PayUnit
+      }
+    }
 
     if (!transactionId) {
       return NextResponse.json({ error: "Missing transaction_id" }, { status: 400 });

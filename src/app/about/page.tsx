@@ -8,7 +8,7 @@ const values = [
   { icon: Target, title: "Mission-Driven", desc: "Every decision is guided by our mission to make quality education accessible to everyone worldwide.", color: "text-[var(--primary)]", bg: "bg-[var(--primary)]/10" },
   { icon: Heart, title: "Student First", desc: "We design every feature with students in mind, ensuring an engaging and effective learning experience.", color: "text-rose-500", bg: "bg-rose-100" },
   { icon: Zap, title: "Innovation", desc: "Constantly evolving our platform with the latest technology to deliver cutting-edge learning tools.", color: "text-[var(--accent)]", bg: "bg-[var(--accent)]/10" },
-  { icon: Globe, title: "Global Impact", desc: "Building bridges across borders, connecting learners and instructors from 150+ countries.", color: "text-blue-600", bg: "bg-blue-100" },
+  { icon: Globe, title: "Global Impact", desc: "Building bridges across borders, connecting learners and instructors from 4 countries.", color: "text-blue-600", bg: "bg-blue-100" },
 ];
 
 export default function AboutPage() {
@@ -36,10 +36,10 @@ export default function AboutPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { icon: Users, value: "500K+", label: "Active Learners", color: "text-[var(--primary)]" },
-              { icon: BookOpen, value: "1,000+", label: "Expert Courses", color: "text-[var(--accent)]" },
-              { icon: Award, value: "200+", label: "Expert Instructors", color: "text-purple-600" },
-              { icon: Globe, value: "150+", label: "Countries Reached", color: "text-blue-600" },
+              { icon: Users, value: "300+", label: "Active Learners", color: "text-[var(--primary)]" },
+              { icon: BookOpen, value: "20+", label: "Expert Courses", color: "text-[var(--accent)]" },
+              { icon: Award, value: "10+", label: "Expert Instructors", color: "text-purple-600" },
+              { icon: Globe, value: "4+", label: "Countries Reached", color: "text-blue-600" },
             ].map((stat) => (
               <div key={stat.label}>
                 <stat.icon className={`w-6 h-6 ${stat.color} mx-auto mb-2`} />
@@ -64,7 +64,7 @@ export default function AboutPage() {
               We believe education is the most powerful tool for changing the world. Gizami was built to break down barriers — financial, geographical, and technical — that prevent people from accessing the skills they need to thrive.
             </p>
             <p className="text-gray-600 leading-relaxed mb-8">
-              From our humble beginnings in a small office in San Francisco, we&apos;ve grown into a global community of 500,000+ learners, 200+ instructors, and partners across 150 countries.
+              From our humble beginnings in a small office in San Francisco, we&apos;ve grown into a global community of 300+ learners, 10+ instructors, and partners across 4 countries.
             </p>
             <Link href="/courses" className="btn-primary">
               Explore Our Courses

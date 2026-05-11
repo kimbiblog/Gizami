@@ -179,7 +179,7 @@ export default function HeroSlider() {
                     </div>
                   ))}
                 </div>
-                <p className="text-white font-bold text-lg">500K+</p>
+                <p className="text-white font-bold text-lg">300+</p>
                 <p className="text-green-300 text-xs">Students enrolled</p>
               </div>
 

@@ -1,6 +1,4 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Globe,
   Bell,
@@ -12,6 +10,7 @@ import {
   Check,
 } from "lucide-react";
 import AdminHeader from "@/components/admin/AdminHeader";
+import { supabase } from "@/lib/supabase";
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -55,10 +54,58 @@ export default function AdminSettingsPage() {
     refundDays: "30",
   });
 
+  const [security, setSecurity] = useState({
+    registrationEnabled: true,
+    loginEnabled: true,
+  });
+
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const { data, error } = await supabase
+          .from("settings")
+          .select("*")
+          .eq("id", "00000000-0000-0000-0000-000000000000")
+          .single();
+
+        if (data) {
+          setSecurity({
+            registrationEnabled: data.registration_enabled,
+            loginEnabled: data.login_enabled,
+          });
+        }
+      } catch (err) {
+        console.error("Error fetching settings:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchSettings();
+  }, []);
+
   const handleSave = async () => {
-    await new Promise((r) => setTimeout(r, 800));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+    setSaved(false);
+    try {
+      const { error } = await supabase
+        .from("settings")
+        .update({
+          registration_enabled: security.registrationEnabled,
+          login_enabled: security.loginEnabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", "00000000-0000-0000-0000-000000000000");
+
+      if (error) throw error;
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      console.error("Error saving settings:", err);
+      alert("Failed to save settings. Please try again.");
+    }
   };
 
   const sections = [
@@ -183,6 +230,7 @@ export default function AdminSettingsPage() {
                     <label className="form-label">Payment Provider</label>
                     <select className="form-input" value={payment.provider} onChange={(e) => setPayment({ ...payment, provider: e.target.value })}>
                       <option value="payunit">PayUnit (Cameroon)</option>
+                      <option value="tranzak">Tranzak</option>
                       <option value="stripe">Stripe</option>
                       <option value="paystack">Paystack</option>
                       <option value="flutterwave">Flutterwave</option>
@@ -217,11 +265,49 @@ export default function AdminSettingsPage() {
               </div>
             )}
 
-            {(activeSection === "security" || activeSection === "email" || activeSection === "appearance") && (
+            {activeSection === "security" && (
+              <div className="bg-white rounded-2xl border border-[var(--border)] p-6 space-y-5">
+                <div>
+                  <h2 className="font-bold text-gray-800 mb-1">Security & Access</h2>
+                  <p className="text-sm text-gray-500">Manage platform-wide access controls</p>
+                </div>
+                <hr className="border-[var(--border)]" />
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 rounded-2xl border border-[var(--border)] hover:bg-gray-50 transition-colors">
+                    <div>
+                      <p className="font-medium text-sm text-gray-800">User Registration</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Allow new users to create accounts</p>
+                    </div>
+                    <Toggle
+                      checked={security.registrationEnabled}
+                      onChange={(v) => setSecurity({ ...security, registrationEnabled: v })}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 rounded-2xl border border-[var(--border)] hover:bg-gray-50 transition-colors">
+                    <div>
+                      <p className="font-medium text-sm text-gray-800">User Login</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Allow users to log into their accounts</p>
+                    </div>
+                    <Toggle
+                      checked={security.loginEnabled}
+                      onChange={(v) => setSecurity({ ...security, loginEnabled: v })}
+                    />
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-100">
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      <strong>Note:</strong> Disabling login will prevent students and teachers from accessing their dashboards. Administrators will still be able to log in to restore access.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(activeSection === "email" || activeSection === "appearance") && (
               <div className="bg-white rounded-2xl border border-[var(--border)] p-6">
                 <div className="text-center py-12">
                   <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    {activeSection === "security" && <Shield className="w-7 h-7 text-gray-400" />}
                     {activeSection === "email" && <Mail className="w-7 h-7 text-gray-400" />}
                     {activeSection === "appearance" && <Palette className="w-7 h-7 text-gray-400" />}
                   </div>
