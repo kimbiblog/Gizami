@@ -337,6 +337,55 @@ function DashboardContent() {
             {/* ─── OVERVIEW TAB ─── */}
             {activeTab === "overview" && (
               <>
+                {/* Subscription Status */}
+                <div className="bg-white rounded-2xl border border-[var(--border)] overflow-hidden shadow-sm">
+                  <div className="p-5 border-b border-gray-50 flex items-center justify-between">
+                    <h2 className="font-bold text-gray-800 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-500" />
+                      Subscription Plan
+                    </h2>
+                    {profile?.subscription_end_date && new Date(profile.subscription_end_date) > new Date() ? (
+                      <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Active</span>
+                    ) : (
+                      <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Expired</span>
+                    )}
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <p className="text-xs text-gray-400">Gizami Monthly Access</p>
+                        <p className="text-lg font-bold text-gray-800">
+                          {profile?.subscription_end_date ? (
+                            new Date(profile.subscription_end_date) > new Date() ? (
+                              <>
+                                {Math.ceil((new Date(profile.subscription_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} Days Left
+                              </>
+                            ) : "Subscription Expired"
+                          ) : "No Active Plan"}
+                        </p>
+                      </div>
+                      <Link href="/subscription" className="btn-primary text-xs py-2 px-4">
+                        {profile?.subscription_end_date ? "Renew Now" : "Subscribe Now"}
+                      </Link>
+                    </div>
+                    {profile?.subscription_end_date && (
+                      <>
+                        <div className="progress-bar h-2 mb-2">
+                          <div 
+                            className="progress-fill bg-amber-500" 
+                            style={{ 
+                              width: `${Math.max(0, Math.min(100, (Math.ceil((new Date(profile.subscription_end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) / 30) * 100))}%` 
+                            }} 
+                          />
+                        </div>
+                        <p className="text-[10px] text-gray-400">
+                          Expires on: {new Date(profile.subscription_end_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
                 {/* Stats */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                   {[

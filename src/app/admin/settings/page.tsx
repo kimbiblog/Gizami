@@ -49,10 +49,11 @@ export default function AdminSettingsPage() {
   });
 
   const [payment, setPayment] = useState({
-    provider: "stripe",
+    provider: "tranzak",
     instructorShare: "70",
     vatEnabled: false,
     refundDays: "30",
+    subscriptionPrice: 1000,
   });
 
   const [security, setSecurity] = useState({
@@ -76,6 +77,9 @@ export default function AdminSettingsPage() {
             registrationEnabled: data.registration_enabled,
             loginEnabled: data.login_enabled,
           });
+          if (data.subscription_price !== undefined) {
+            setPayment((prev) => ({ ...prev, subscriptionPrice: data.subscription_price }));
+          }
         }
       } catch (err) {
         console.error("Error fetching settings:", err);
@@ -95,6 +99,7 @@ export default function AdminSettingsPage() {
         .update({
           registration_enabled: security.registrationEnabled,
           login_enabled: security.loginEnabled,
+          subscription_price: payment.subscriptionPrice,
           updated_at: new Date().toISOString(),
         })
         .eq("id", "00000000-0000-0000-0000-000000000000");
@@ -244,6 +249,10 @@ export default function AdminSettingsPage() {
                   <div>
                     <label className="form-label">Refund Window (days)</label>
                     <input type="number" className="form-input" value={payment.refundDays} onChange={(e) => setPayment({ ...payment, refundDays: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="form-label">Global Subscription Price ({general.currency})</label>
+                    <input type="number" min="0" className="form-input" value={payment.subscriptionPrice} onChange={(e) => setPayment({ ...payment, subscriptionPrice: parseInt(e.target.value) || 0 })} />
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-2xl border border-[var(--border)]">
                     <div>

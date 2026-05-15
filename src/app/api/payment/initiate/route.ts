@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-// @ts-ignore
-import TRANZAK from "tranzak-node";
+// DrimzWallet Integration (Generic)
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,9 +16,31 @@ export async function POST(req: NextRequest) {
 
     const { courseId, userId, phoneNumber, gateway, amount, courseTitle } = await req.json();
 
-    if (!courseId || !userId || !phoneNumber || !gateway || !amount) {
+    if (!courseId || !userId || !phoneNumber || !gateway) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
+
+    let finalAmount = amount;
+    let finalTitle = courseTitle;
+
+    // If it's a subscription, fetch the price from settings to be safe
+    if (courseId === "subscription") {
+      const { data: settings } = await supabaseAdmin
+        .from("settings")
+        .select("subscription_price")
+        .eq("id", "00000000-0000-0000-0000-000000000000")
+        .single();
+      
+      finalAmount = settings?.subscription_price || 1000;
+      finalTitle = "Gizami Monthly Subscription";
+    }
+
+    if (!finalAmount) {
+      return NextResponse.json({ error: "Missing payment amount" }, { status: 400 });
+    }
+
+    // Temporary override for testing purposes to allow small transactions
+    finalAmount = 100;
 
     // Generate a unique transaction ID
     const transactionId = `GIZ-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -29,10 +50,7 @@ export async function POST(req: NextRequest) {
     const notifyUrl = `${siteUrl}/api/payment/webhook`;
 
     // Check which payment provider is active from settings, default to tranzak if not set
-    // In our implementation plan, the user wants to use tranzak.
-    // If the provider isn't stored in a generic 'settings' table yet, we'll default to 'tranzak'.
-    let activeProvider = "tranzak";
-    // We'll also check if the user selected Tranzak explicitly if we had frontend support for it
+    let activeProvider = "drimzwallet";
     
     // Store pending payment in DB
     await supabaseAdmin.from("payments").insert({
@@ -40,51 +58,129 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       course_id: courseId,
       transaction_id: transactionId,
-      amount,
+      amount: finalAmount,
       currency: "XAF",
       gateway,
       status: "pending",
     });
 
-    if (activeProvider === "tranzak") {
-      const appId = process.env.TRANZAK_APP_ID;
-      const appKey = process.env.TRANZAK_APP_KEY;
-      const mode = process.env.TRANZAK_MODE || "sandbox";
+    // Fetch user details to pre-fill the checkout session
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("full_name, email")
+      .eq("id", userId)
+      .single();
 
-      if (!appId || !appKey) {
-        return NextResponse.json({ error: "Tranzak credentials missing" }, { status: 503 });
+    const userName = profile?.full_name || "Gizami Student";
+    const userEmail = profile?.email || "student@gizami.com";
+    const names = userName.split(" ");
+    const firstName = names[0] || "Gizami";
+    const lastName = names.slice(1).join(" ") || "Student";
+
+    if (activeProvider === "drimzwallet") {
+      const apiKey = process.env.GIZAMI_BANKING_API_KEY;
+      const apiUrl = process.env.GIZAMI_BANKING_API_URL || "https://api.deepdrimz.dev";
+
+      if (!apiKey) {
+        return NextResponse.json({ error: "Gizami Banking API credentials missing" }, { status: 503 });
       }
 
-      const client = new TRANZAK({ appId, appKey, mode });
-      
-      // We pass the transactionId as customTransactionRef or mchTransactionRef
-      // Tranzak requires the phone number without the +
-      const cleanPhone = phoneNumber.replace("+", "");
+      try {
+        const checkoutPayload = {
+          merchant_app_key: apiKey,
+          fee_payer: "CLIENT",
+          customer: {
+            first_name: firstName,
+            last_name: lastName,
+            email: userEmail,
+            phone_number: phoneNumber
+          },
+          invoice: {
+            currency: "XAF",
+            total_amount: finalAmount,
+            due_amount: finalAmount,
+            items: [
+              {
+                title: finalTitle,
+                description: `Payment for: ${finalTitle}`,
+                quantity: 1,
+                unit_price: finalAmount
+              }
+            ]
+          },
+          callbacks: {
+            redirect_success_url: returnUrl,
+            redirect_failure_url: returnUrl,
+            webhook_url: `${notifyUrl}?txId=${transactionId}`
+          }
+        };
 
-      // Send the prompt directly to the user's phone!
-      const transaction = await client.payment.collection.simple.chargeMobileMoney({
-        amount,
-        currencyCode: "XAF",
-        description: `Enrollment for: ${courseTitle}`,
-        payerNote: `Payment for Gizami course`,
-        mchTransactionRef: transactionId,
-        mobileWalletNumber: cleanPhone,
-      });
+        const response = await fetch(`${apiUrl}/banking/transactions/checkouts`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey,
+          },
+          body: JSON.stringify(checkoutPayload),
+        });
 
-      // Update the DB record with Tranzak's internal request ID so the webhook can match it
-      // Wait, the callback page polls using transactionId (which is mchTransactionRef).
-      // So we don't strictly need to overwrite it, but it's good to keep Tranzak's requestId.
-      await supabaseAdmin
-        .from("payments")
-        .update({ provider_ref: transaction.data.requestId })
-        .eq("transaction_id", transactionId);
+        if (!response.ok) {
+           const errorText = await response.text();
+           console.error("Gizami Banking API Error:", errorText);
+           throw new Error(errorText || "Payment gateway rejected the request");
+        }
 
-      // Tranzak processes it directly. We redirect the user to our callback page to poll!
-      return NextResponse.json({
-        success: true,
-        transactionId,
-        redirectUrl: returnUrl,
-      });
+        const data = await response.json();
+        const sessionId = data?.data?.session_id;
+
+        if (sessionId) {
+           // Map frontend gateway ID to Gizami provider IDs
+           const providerMap: Record<string, string> = {
+             "CM_ORANGE": "ORANGE_MONEY_CM",
+             "CM_MTN": "MTN_MOMO_CM",
+           };
+           const provider = providerMap[gateway] || "MTN_MOMO_CM";
+           
+           // Clean phone number (Gizami API expects raw phone or +237)
+           const cleanPhone = phoneNumber.replace("+", "");
+
+           // Initiate Mobile Money push directly
+           const pushResponse = await fetch(`${apiUrl}/banking/transactions/checkouts/${sessionId}/payment`, {
+             method: "POST",
+             headers: {
+               "Content-Type": "application/json",
+               "X-API-Key": apiKey,
+             },
+             body: JSON.stringify({
+               method_type: "MOBILE_MONEY",
+               provider,
+               mobile_money_account: {
+                 phone_number: cleanPhone
+               }
+             })
+           });
+
+           if (!pushResponse.ok) {
+             console.error("Mobile Money Push Error:", await pushResponse.text());
+             // We won't throw here; if push fails, we can optionally fallback to the redirect url
+             return NextResponse.json({
+               success: true,
+               transactionId,
+               redirectUrl: data?.data?.session_url || returnUrl,
+             });
+           }
+        }
+        
+        // Return success WITHOUT redirectUrl, so the frontend triggers the polling screen
+        return NextResponse.json({
+          success: true,
+          transactionId,
+        });
+
+      } catch (error: any) {
+        console.error("Gizami Banking API Init Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to initiate payment with Gizami Banking API." }, { status: 502 });
+      }
 
     } else {
       // Call PayUnit

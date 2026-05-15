@@ -53,6 +53,29 @@ export default function CourseLearnPage() {
         }
         setUser(authUser);
 
+        // Check access: Enrollment OR Subscription
+        // 1. Check individual enrollment
+        const { data: enrollment } = await supabase
+          .from("enrollments")
+          .select("id")
+          .eq("user_id", authUser.id)
+          .eq("course_id", id)
+          .maybeSingle();
+
+        if (!enrollment) {
+          // 2. Check global subscription
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("subscription_end_date")
+            .eq("id", authUser.id)
+            .maybeSingle();
+
+          if (!profile?.subscription_end_date || new Date(profile.subscription_end_date) <= new Date()) {
+            router.push(`/subscription?redirect=/courses/${id}/learn`);
+            return;
+          }
+        }
+
         // Fetch course
         const { data: crs, error: crsErr } = await supabase
           .from("courses")

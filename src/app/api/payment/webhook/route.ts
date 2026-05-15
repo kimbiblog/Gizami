@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-// @ts-ignore
-import TRANZAK from "tranzak-node";
+// DrimzWallet Integration (Generic)
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,28 +17,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log("Webhook received:", body);
 
-    let transactionId = body.transaction_id || body.transactionId;
-    let status = body.status || body.transaction_status;
-    let isTranzak = false;
+    // Try to get txId from the query string first (passed by Gizami redirect)
+    let transactionId = req.nextUrl.searchParams.get("txId");
 
-    // Try to validate as Tranzak Webhook
-    const appId = process.env.TRANZAK_APP_ID;
-    const appKey = process.env.TRANZAK_APP_KEY;
-    
-    if (appId && appKey) {
-      try {
-        const client = new TRANZAK({ appId, appKey, mode: process.env.TRANZAK_MODE || "sandbox" });
-        const isValid = await client.webhook.process(body);
-        if (isValid) {
-          isTranzak = true;
-          // Tranzak webhook structure
-          transactionId = body.data?.mchTransactionRef || body.data?.requestId;
-          status = body.data?.status;
-        }
-      } catch (e) {
-        // Not a valid Tranzak webhook, fallback to PayUnit
-      }
+    // Fallback to body properties
+    if (!transactionId) {
+      transactionId = body.transaction_id || body.transactionId || body.reference || body.session_id;
     }
+
+    let status = body.status || body.transaction_status;
 
     if (!transactionId) {
       return NextResponse.json({ error: "Missing transaction_id" }, { status: 400 });
@@ -74,21 +60,33 @@ export async function POST(req: NextRequest) {
         .update({ status: "paid" })
         .eq("transaction_id", transactionId);
 
-      // Create enrollment if not already enrolled
-      const { data: existing } = await supabaseAdmin
-        .from("enrollments")
-        .select("user_id")
-        .eq("user_id", payment.user_id)
-        .eq("course_id", payment.course_id)
-        .maybeSingle();
+      if (payment.course_id === "subscription") {
+        // Calculate new end date (30 days from now)
+        const endDate = new Date();
+        endDate.setDate(endDate.getDate() + 30);
 
-      if (!existing) {
-        await supabaseAdmin.from("enrollments").insert({
-          user_id: payment.user_id,
-          course_id: payment.course_id,
-          progress: 0,
-          status: "active",
-        });
+        // Update user profile with subscription_end_date
+        await supabaseAdmin
+          .from("profiles")
+          .update({ subscription_end_date: endDate.toISOString() })
+          .eq("id", payment.user_id);
+      } else {
+        // Create enrollment if not already enrolled
+        const { data: existing } = await supabaseAdmin
+          .from("enrollments")
+          .select("user_id")
+          .eq("user_id", payment.user_id)
+          .eq("course_id", payment.course_id)
+          .maybeSingle();
+
+        if (!existing) {
+          await supabaseAdmin.from("enrollments").insert({
+            user_id: payment.user_id,
+            course_id: payment.course_id,
+            progress: 0,
+            status: "active",
+          });
+        }
       }
     } else {
       // Mark as failed

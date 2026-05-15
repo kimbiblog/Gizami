@@ -215,26 +215,7 @@ export default function CoursesPage() {
                 </div>
               </div>
 
-              {/* Price */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Price</h3>
-                <div className="flex flex-wrap gap-2">
-                  {priceFilters.map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPriceFilter(p)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                        priceFilter === p
-                          ? "bg-[var(--primary)] text-white"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      }`}
-                      aria-pressed={priceFilter === p}
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
 
               {/* Level */}
               <div>

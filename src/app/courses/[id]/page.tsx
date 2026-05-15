@@ -75,16 +75,33 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
           setCurriculumData(sortedMods);
         }
 
-        // Check enrollment
+        // Check access: Enrollment OR Subscription
         if (authUser) {
-          const { data: enrol } = await supabase
+          // 1. Check individual enrollment
+          const { data: enrollment } = await supabase
             .from("enrollments")
-            .select("*")
+            .select("id")
             .eq("user_id", authUser.id)
             .eq("course_id", id)
             .maybeSingle();
-          
-          if (enrol) setIsEnrolled(true);
+
+          if (enrollment) {
+            setIsEnrolled(true);
+          } else {
+            // 2. Check global subscription
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("subscription_end_date")
+              .eq("id", authUser.id)
+              .maybeSingle();
+            
+            if (profile?.subscription_end_date) {
+              const endDate = new Date(profile.subscription_end_date);
+              if (endDate > new Date()) {
+                setIsEnrolled(true);
+              }
+            }
+          }
         }
 
       } catch (err) {
@@ -97,7 +114,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     fetchCourseData();
   }, [id]);
 
-  const isFree = !course?.price || course.price === 0 || course.price === "free";
+  const [showSubscriptionPrompt, setShowSubscriptionPrompt] = useState(false);
 
   const handleEnroll = async () => {
     if (!user) {
@@ -110,59 +127,36 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
       return;
     }
 
-    // Paid course — open payment modal
-    if (!isFree) {
-      setShowPaymentModal(true);
-      return;
-    }
+    // Check subscription status again to be sure
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("subscription_end_date")
+      .eq("id", user.id)
+      .maybeSingle();
 
-    // Free course — enroll directly
-    setIsEnrolling(true);
-    try {
-      const { error } = await supabase
-        .from("enrollments")
-        .insert({
-          user_id: user.id,
-          course_id: id,
-          progress: 0,
-          status: "active"
-        });
-      
-      if (error) throw error;
-      
-      setIsEnrolled(true);
-      router.push(`/courses/${id}/learn`);
-    } catch (err) {
-      console.error("Enrollment error:", err);
-      alert("Failed to enroll. Please try again.");
-    } finally {
+    const isSubscribed = profile?.subscription_end_date && new Date(profile.subscription_end_date) > new Date();
+
+    if (isSubscribed) {
+      setIsEnrolling(true);
+      // Auto-enroll the student since they have a subscription
+      const { error } = await supabase.from("enrollments").insert({
+        user_id: user.id,
+        course_id: id,
+        progress: 0,
+        status: "active"
+      });
       setIsEnrolling(false);
+      
+      if (!error || error.code === "23505") { // Success or already enrolled
+        router.push(`/courses/${id}/learn`);
+      } else {
+        alert("Failed to enroll. Please try again.");
+      }
+    } else {
+      // Show the "You haven't subscribed yet" prompt
+      setShowSubscriptionPrompt(true);
     }
   };
-
-  const reviews = [
-    {
-      name: "Fatima Al-Hassan",
-      avatar: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=80&q=80",
-      rating: 5,
-      date: "2 weeks ago",
-      text: "This course completely transformed my understanding. The instructor explains everything clearly and the projects are incredibly practical!",
-    },
-    {
-      name: "Kwame Asante",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&q=80",
-      rating: 5,
-      date: "1 month ago",
-      text: "I've taken many online courses but this one stands out. Perfect balance of theory and practice. Highly recommended!",
-    },
-    {
-      name: "Mei Lin",
-      avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&q=80",
-      rating: 4,
-      date: "3 weeks ago",
-      text: "Great content, great instructor. Would love more advanced topics but overall excellent course for the price.",
-    },
-  ];
 
   if (isLoading) {
     return (
@@ -188,16 +182,30 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "var(--bg)" }}>
-      {/* Payment Modal */}
-      {showPaymentModal && course && user && (
-        <PaymentModal
-          courseId={id}
-          courseTitle={course.title}
-          price={course.price}
-          userId={user.id}
-          onClose={() => setShowPaymentModal(false)}
-        />
+      {/* Subscription Prompt Modal */}
+      {showSubscriptionPrompt && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-fade-in">
+            <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Lock className="w-10 h-10 text-amber-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Access Locked</h2>
+            <p className="text-gray-500 mb-8">You haven't subscribed yet. Get a monthly subscription to access all courses on Gizami.</p>
+            <div className="space-y-3">
+              <Link href="/subscription" className="btn-primary w-full justify-center py-4 text-base">
+                Subscribe NOW
+              </Link>
+              <button 
+                onClick={() => setShowSubscriptionPrompt(false)}
+                className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
       )}
+
       {/* Hero */}
       <div className="bg-gradient-to-br from-gray-900 to-gray-800 text-white pt-24 pb-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -214,11 +222,6 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 <span className="bg-white/10 text-gray-300 px-3 py-1 rounded-lg text-xs">
                   {course.level}
                 </span>
-                {course.badge && (
-                  <span className="bg-[var(--accent)] text-white px-3 py-1 rounded-lg text-xs font-bold">
-                    {course.badge}
-                  </span>
-                )}
               </div>
 
               <h1 className="text-3xl md:text-4xl font-extrabold mb-4 leading-tight">{course.title}</h1>
@@ -242,7 +245,6 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
               <div className="flex items-center gap-3">
                 <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gray-700">
-                  {/* Instructor Avatar Placeholder */}
                   <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-xs">
                     GI
                   </div>
@@ -304,7 +306,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 </button>
               </div>
               <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm rounded-xl px-3 py-1.5 text-white text-sm">
-                🎓 Preview: Free for everyone
+                🎓 Included with Subscription
               </div>
             </div>
 
@@ -335,24 +337,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                   <div className="text-gray-600 text-sm leading-relaxed space-y-3">
                     <p>{course.description}</p>
                     <p>
-                      This comprehensive course takes you from absolute beginner to proficient practitioner.
-                      Through hands-on projects and real-world examples, you&apos;ll develop skills that employers are actively looking for.
-                    </p>
-                    <p>
                       Each module is carefully structured to build upon previous knowledge, ensuring a smooth and effective learning experience.
-                      You&apos;ll have access to all course materials, community support, and regular updates.
                     </p>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-[var(--border)]">
-                  <h2 className="text-xl font-bold text-gray-800 mb-3">Tags</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {course.tags?.map((tag: string) => (
-                      <span key={tag} className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-xl text-sm">
-                        {tag}
-                      </span>
-                    ))}
                   </div>
                 </div>
               </div>
@@ -370,7 +356,6 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                       <button
                         onClick={() => setOpenSection(openSection === i ? null : i)}
                         className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-                        aria-expanded={openSection === i}
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-7 h-7 bg-[var(--primary)]/10 rounded-lg flex items-center justify-center text-xs font-bold text-[var(--primary)]">
@@ -389,16 +374,9 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                             <div key={lesson.id} className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
                               <div className="flex items-center gap-3">
                                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${lesson.is_preview ? "bg-[var(--primary)]/10" : "bg-gray-100"}`}>
-                                  {lesson.is_preview ? (
-                                    <PlayCircle className="w-4 h-4 text-[var(--primary)]" />
-                                  ) : (
-                                    <Lock className="w-3.5 h-3.5 text-gray-400" />
-                                  )}
+                                  <Lock className="w-3.5 h-3.5 text-gray-400" />
                                 </div>
-                                <div>
-                                  <p className="text-sm text-gray-700">{lesson.title}</p>
-                                  {lesson.is_preview && <span className="text-xs text-[var(--primary)] font-medium">Preview</span>}
-                                </div>
+                                <p className="text-sm text-gray-700">{lesson.title}</p>
                               </div>
                               <span className="text-xs text-gray-400 font-medium">{lesson.duration || "5m"}</span>
                             </div>
@@ -423,47 +401,6 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                     </div>
                     <p className="text-sm text-gray-500 mt-1">Course Rating</p>
                   </div>
-                  <div className="flex-1 space-y-2">
-                    {[5, 4, 3, 2, 1].map((star) => (
-                      <div key={star} className="flex items-center gap-3">
-                        <div className="progress-bar flex-1">
-                          <div className="progress-fill" style={{ width: `${star === 5 ? 78 : star === 4 ? 15 : star === 3 ? 5 : 2}%` }} />
-                        </div>
-                        <div className="flex items-center gap-1 w-8 justify-center">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span className="text-xs text-gray-500">{star}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-5">
-                  {reviews.map((r) => (
-                    <div key={r.name} className="flex gap-4 p-4 rounded-xl bg-gray-50">
-                      <div className="relative w-10 h-10 rounded-xl overflow-hidden flex-shrink-0 bg-gray-100">
-                        {r.avatar ? (
-                          <Image src={r.avatar} alt={r.name} fill className="object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-gray-400 font-bold text-xs bg-gray-200">
-                            {r.name.charAt(0)}
-                          </div>
-                        )}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <p className="font-semibold text-sm text-gray-800">{r.name}</p>
-                          <span className="text-xs text-gray-400">{r.date}</span>
-                        </div>
-                        <div className="flex mb-2">
-                          {[...Array(r.rating)].map((_, i) => (
-                            <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                          ))}
-                        </div>
-                        <p className="text-sm text-gray-600">{r.text}</p>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -479,55 +416,32 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                   fill 
                   className="object-cover" 
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end p-4">
-                  <button className="flex items-center gap-2 bg-white text-[var(--primary)] font-semibold text-sm px-4 py-2 rounded-xl hover:scale-105 transition-transform">
-                    <Play className="w-4 h-4" fill="currentColor" />
-                    Preview Course
-                  </button>
-                </div>
               </div>
 
               <div className="p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  {course.price === 0 ? (
-                    <span className="text-3xl font-extrabold text-[var(--primary)]">Free</span>
-                  ) : (
-                    <>
-                      <span className="text-3xl font-extrabold text-gray-800">{course.price?.toLocaleString()} XAF</span>
-                      <span className="text-lg text-gray-400 line-through">{(Math.round((course.price || 0) * 1.5)).toLocaleString()} XAF</span>
-                      <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-lg">33% OFF</span>
-                    </>
-                  )}
+                <div className="mb-6">
+                   <span className="text-xs font-bold text-[var(--primary)] uppercase tracking-widest bg-[var(--primary)]/10 px-3 py-1 rounded-full">Monthly Subscription</span>
+                   <p className="text-sm text-gray-400 mt-2">Get access to this and all other courses for one monthly fee.</p>
                 </div>
 
                 <button 
                   onClick={handleEnroll}
                   disabled={isEnrolling}
-                  className="btn-primary w-full mb-3 text-base py-4 justify-center disabled:opacity-70"
+                  className="btn-primary w-full mb-4 text-base py-4 justify-center disabled:opacity-70 shadow-lg"
                 >
                   {isEnrolling ? (
-                    <>
-                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                      Processing...
-                    </>
+                    "Enrolling..."
                   ) : isEnrolled ? (
                     "▶ Continue Learning"
-                  ) : isFree ? (
-                    "⚡ Enroll Free"
                   ) : (
-                    `💳 Enroll for ${course.price?.toLocaleString("fr-CM")} XAF`
+                    "Enroll Now"
                   )}
                 </button>
-                <button className="btn-outline w-full mb-4 text-base py-3.5 justify-center">
-                  Add to Wishlist
-                </button>
-
-                <p className="text-center text-xs text-gray-400 mb-4">30-Day Money-Back Guarantee</p>
-
+                
                 <div className="border-t border-[var(--border)] pt-4">
-                  <h3 className="font-semibold text-sm text-gray-700 mb-3">This course includes:</h3>
+                  <h3 className="font-semibold text-sm text-gray-700 mb-3">Included with subscription:</h3>
                   <div className="space-y-2.5">
-                    {includesData.map((item) => (
+                    {includesData.slice(0, 4).map((item) => (
                       <div key={item.text} className="flex items-center gap-2.5 text-sm text-gray-600">
                         <item.icon className="w-4 h-4 text-[var(--primary)] flex-shrink-0" />
                         {item.text}

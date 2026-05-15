@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Star, Users, Clock, BookOpen, Zap, Lock } from "lucide-react";
+import { Star, Users, Clock, BookOpen, Zap, Lock, Play } from "lucide-react";
 import type { Course } from "@/lib/mockData";
 
 interface CourseCardProps {
@@ -209,34 +209,32 @@ export default function CourseCard({ course, loading }: CourseCardProps) {
             </span>
           </div>
 
-          {/* Price + CTA */}
-          <div className="mt-auto flex items-center justify-between gap-2">
-            <div>
-              {course.price === "free" ? (
-                <span className="text-lg font-bold text-[var(--primary)]">Free</span>
+          {/* CTA */}
+          <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+             <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--primary)] uppercase tracking-wider">
+               <Lock className="w-3.5 h-3.5" />
+               Locked
+             </div>
+            <button
+              className={`py-2.5 px-5 text-xs font-bold rounded-xl transition-all ${
+                isEnrolled ? "bg-gray-100 text-gray-500" : "btn-primary shadow-sm hover:shadow-md"
+              }`}
+              onClick={(e) => {
+                e.preventDefault();
+                router.push(`/courses/${course.id}`);
+              }}
+            >
+              {isEnrolled ? (
+                <div className="flex items-center gap-2">
+                  <Play className="w-3 h-3 fill-current" />
+                  Continue
+                </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold text-gray-800">{course.price.toLocaleString()} XAF</span>
-                  <span className="text-sm text-gray-400 line-through">{(Math.round(course.price * 1.5)).toLocaleString()} XAF</span>
+                  <Zap className="w-3.5 h-3.5" />
+                  Enroll Now
                 </div>
               )}
-            </div>
-            <button
-              className={`py-2 px-4 text-xs disabled:opacity-70 ${
-                isEnrolled ? "btn-outline" : "btn-primary"
-              }`}
-              aria-label={isEnrolled ? `Continue ${course.title}` : `Enroll in ${course.title}`}
-              onClick={handleEnroll}
-              disabled={isEnrolling}
-            >
-              {isEnrolling ? (
-                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin mr-1" />
-              ) : isEnrolled ? (
-                <span>▶</span>
-              ) : (
-                <Zap className="w-3.5 h-3.5" />
-              )}
-              {isEnrolling ? "Enrolling..." : isEnrolled ? "Continue" : "Enroll Now"}
             </button>
           </div>
         </div>
