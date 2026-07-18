@@ -39,13 +39,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing payment amount" }, { status: 400 });
     }
 
-    // Temporary override for testing purposes to allow small transactions
-    finalAmount = 100;
+    // NOTE: removed hardcoded "finalAmount = 100" test override — charges now use the real price.
 
     // Generate a unique transaction ID
     const transactionId = `GIZ-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+    // DrimzWallet cannot reach localhost/http — force https so the webhook is reachable.
+    if (siteUrl.startsWith("http://") && !siteUrl.includes("localhost")) {
+      siteUrl = siteUrl.replace("http://", "https://");
+    }
     const returnUrl = `${siteUrl}/payment/callback?courseId=${courseId}&txId=${transactionId}`;
     const notifyUrl = `${siteUrl}/api/payment/webhook`;
 
