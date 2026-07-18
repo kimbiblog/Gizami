@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 // DrimzWallet Integration (Generic)
 
+// Helper: dig a status value out of whatever shape DrimzWallet sends.
+// Their payload nests the real status under data.payment.status (see sample
+// checkout responses). We check every plausible location so we don't depend
+// on one exact shape.
+function extractStatus(body: any): string {
+  return (
+    body?.data?.payment?.status ??
+    body?.data?.status ??
+    body?.payment?.status ??
+    body?.status ??
+    body?.transaction_status ??
+    ""
+  )
+    .toString()
+    .toUpperCase();
+}
+
+// Helper: pull the transaction reference out of the body if it isn't in the query string.
+function extractTxId(body: any): string | null {
+  return (
+    body?.transaction_id ||
+    body?.transactionId ||
+    body?.reference ||
+    body?.data?.session_id ||
+    body?.session_id ||
+    null
+  );
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -15,17 +44,15 @@ export async function POST(req: NextRequest) {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    console.log("Webhook received:", body);
+    console.log("Webhook received:", JSON.stringify(body));
 
-    // Try to get txId from the query string first (passed by Gizami redirect)
+    // Prefer the txId we attached to the webhook_url query string on initiation.
     let transactionId = req.nextUrl.searchParams.get("txId");
-
-    // Fallback to body properties
     if (!transactionId) {
-      transactionId = body.transaction_id || body.transactionId || body.reference || body.session_id;
+      transactionId = extractTxId(body);
     }
 
-    let status = body.status || body.transaction_status;
+    const status = extractStatus(body);
 
     if (!transactionId) {
       return NextResponse.json({ error: "Missing transaction_id" }, { status: 400 });
@@ -47,11 +74,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, already: true });
     }
 
-    const isSuccess =
-      status === "SUCCESSFUL" ||
-      status === "SUCCESS" ||
-      status === "success" ||
-      status === "COMPLETED";
+    // DrimzWallet uses PAYMENT_* codes (PAYMENT_PENDING, PAYMENT_SUCCESS, etc.).
+    // Match on substrings so we survive minor naming differences
+    // (SUCCESS vs SUCCESSFUL vs SUCCEEDED, COMPLETED vs COMPLETE, PAID).
+    const isSuccess = /SUCCE|COMPLET|PAID/.test(status);
+    const isFailure = /FAIL|CANCEL|EXPIR|DECLIN|REJECT/.test(status);
 
     if (isSuccess) {
       // Mark payment as paid
@@ -88,12 +115,17 @@ export async function POST(req: NextRequest) {
           });
         }
       }
-    } else {
-      // Mark as failed
+    } else if (isFailure) {
+      // Only mark failed on an explicit failure status.
       await supabaseAdmin
         .from("payments")
         .update({ status: "failed" })
         .eq("transaction_id", transactionId);
+    } else {
+      // PENDING / unknown: DrimzWallet often fires an initial pending webhook
+      // before the final one. Leave the record untouched so the final webhook
+      // can still resolve it. (The old code wrongly marked these as "failed".)
+      console.log(`Webhook status "${status}" for ${transactionId} — leaving as pending.`);
     }
 
     return NextResponse.json({ success: true });
@@ -103,7 +135,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PayUnit may send GET pings
+// PayUnit / DrimzWallet may send GET pings
 export async function GET() {
   return NextResponse.json({ ok: true });
 }
