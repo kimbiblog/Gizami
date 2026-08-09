@@ -10,10 +10,10 @@ import { Eye, EyeOff, ArrowRight, Check } from "lucide-react";
 import AuthStatusModal from "@/components/AuthStatusModal";
 
 // ===== SIGNUP MASTER SWITCH =====
-// Public sign-ups are currently OFF.
+// Public sign-ups are currently ON.
 // To re-enable: set SIGNUP_ENABLED to true and commit, then turn on
 // "Allow new users to sign up" in Supabase (Authentication > Sign In / Providers).
-const SIGNUP_ENABLED: boolean = false;
+const SIGNUP_ENABLED: boolean = true;
 
 export default function SignupPage() {
   const router = useRouter();
